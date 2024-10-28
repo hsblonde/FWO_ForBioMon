@@ -1,0 +1,179 @@
+---
+title: "Trend analysis"
+---
+
+```{r}
+#| message: false
+#| warning: false
+
+library(rstan)
+library(bayesplot)
+```
+
+
+## Create some data
+
+Two data series with overlap.
+
+- Long term trend, 20 years but no trend in the response
+- Short term trend, 10 years with a step change after 5 years
+
+```{r}
+set.seed(123)
+
+long_term_data <- data.frame(
+  time = c(1, 10, 20),
+  value = c(10, 10, 10) + rnorm(3, mean = 0, sd = 2) 
+)
+
+short_term_data <- data.frame(
+  time = 16:25,
+  value = c(10, 10, 10, 10, 10, 20, 20, 20, 20, 20) + rnorm(10, mean = 0, sd = 2) 
+)
+
+```
+
+
+```{r}
+plot(long_term_data, 
+     type = "o", col = "blue", 
+     xlab = "Time", ylab = "EBV Response",
+     xlim = c(0,25), ylim = c(0,35))
+points(short_term_data, type = "o", col = "red")
+```
+## Two stan models
+
+Two models are specified.
+
+First model `mod_onestep.stan` fits slopes of long and short term trend separately. The core model part looks like this:
+
+```{r}
+#| eval: false
+model {
+  // Priors
+  alpha_long ~ normal(0, 10);
+  beta_long ~ normal(0, 10);
+  sigma_long ~ cauchy(0, 2);
+  
+  alpha_short ~ normal(0, 10);
+  beta_short ~ normal(0, 10);
+  sigma_short ~ cauchy(0, 2);
+  
+  // Likelihood
+  value_long ~ normal(alpha_long + beta_long * time_long, sigma_long);
+  value_short ~ normal(alpha_short + beta_short * time_short, sigma_short);
+}
+```
+
+The second model `mod_twostep.stan` uses long term trend to inform short term trend. The core model part looks like this:
+
+```{r}
+#| eval: false
+
+model {
+  // Priors for long-term trend
+  alpha_long ~ normal(0, 10);
+  beta_long ~ normal(0, 10);
+  sigma_long ~ cauchy(0, 2);
+  
+  // Long-term trend likelihood
+  value_long ~ normal(alpha_long + beta_long * time_long, sigma_long);
+  
+  // Priors for short-term trend informed by long-term trend
+  alpha_short ~ normal(alpha_long, 5);  // Informing alpha_short with alpha_long
+  beta_short ~ normal(beta_long, 5);    // Informing beta_short with beta_long
+  sigma_short ~ cauchy(0, 2);
+  
+  // Short-term trend likelihood
+  value_short ~ normal(alpha_short + beta_short * time_short, sigma_short);
+}
+```
+
+## Run stan models
+
+Prepare the data
+
+```{r}
+stan_data <- list(
+  N_long = nrow(long_term_data),
+  N_short = nrow(short_term_data),
+  time_long = long_term_data$time,
+  value_long = long_term_data$value,
+  time_short = short_term_data$time,
+  value_short = short_term_data$value
+)
+
+```
+
+Fit the models
+
+```{r}
+#| message: false
+#| warning: false
+
+fit_onestep <- stan(
+  file = 'mod_onestep.stan',
+  data = stan_data,
+  iter = 2000,
+  chains = 4,
+  verbose = FALSE
+)
+
+fit_twostep <- stan(
+  file = 'mod_twostep.stan',
+  data = stan_data,
+  iter = 2000,
+  chains = 4,
+  verbose = FALSE
+)
+```
+
+Trace plots
+
+```{r}
+traceplot(fit_onestep)
+traceplot(fit_twostep)
+```
+
+## Plot posterior distributions of time trends
+
+One-step model
+
+```{r}
+# Extract posterior samples
+posterior_samples <- extract(fit_onestep)
+
+beta_long_samples <- posterior_samples$beta_long
+beta_short_samples <- posterior_samples$beta_short
+
+## Plot the posterior distributions
+mcmc_areas(
+  as.matrix(data.frame(beta_long = beta_long_samples, beta_short = beta_short_samples)),
+  pars = c("beta_long", "beta_short"),
+  prob = 0.95  # 95% credible intervals
+)
+```
+
+Two-step model
+
+```{r}
+## Extract posterior samples
+posterior_samples <- extract(fit_twostep)
+
+beta_long_samples <- posterior_samples$beta_long
+beta_short_samples <- posterior_samples$beta_short
+
+## Plot the posterior distributions
+mcmc_areas(
+  as.matrix(data.frame(beta_long = beta_long_samples, beta_short = beta_short_samples)),
+  pars = c("beta_long", "beta_short"),
+  prob = 0.95  # 95% credible intervals
+)
+
+```
+
+::: notes
+
+Clearly, the one-step model picks up a trend in the short term data that is not present in the long term data. The two-step model, which uses the long term trend to inform the short term trend, does not show this trend.
+
+:::
