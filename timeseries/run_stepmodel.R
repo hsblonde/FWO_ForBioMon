@@ -132,4 +132,6 @@ ggplot() +
   geom_vline(xintercept = step_time_mean, linetype = "dotted", color = "black") +
   labs(title = "Time Series Data and Estimated Values from the Model", x = "Time", y = "Value") +
   scale_color_manual(values = c("Long-term Data" = "blue", "Short-term Data" = "red", "Estimated Long-term Values" = "blue", "Estimated Short-term Values" = "red")) +
-  theme_minimal()
+ ylab("Community-level metric (e.g. proportion of generalist species)")+
+   theme_minimal()+
+  theme(legend.title= element_blank())
