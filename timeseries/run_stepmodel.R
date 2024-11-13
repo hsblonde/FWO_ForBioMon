@@ -2,6 +2,7 @@
 library(bayesplot)
 library(tidyverse)
 library(rstan)
+library(brms)
 
 # Example data with noise and step change
 set.seed(123)  # For reproducibility
@@ -136,4 +137,5 @@ steptime_model<-ggplot() +
   theme_bw()+
   theme(legend.title= element_blank())
 
-ggsave("steptime_model.png", width = 5, height = 4)
+ggsave("steptime_model.png", width = 6, height = 4)
+
